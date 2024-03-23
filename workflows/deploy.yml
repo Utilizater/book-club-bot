@@ -11,4 +11,6 @@ jobs:
 
     steps:
       - name: Checkout code
-        run: echo "Checkout code"
+        uses: actions/checkout@v2 # Correct action to check out code
+      - name: Echo a message
+        run: echo "The code has been checked out!"
