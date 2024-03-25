@@ -1,4 +1,4 @@
-name: Deploy to AWS ECS
+name: Deploy Telegram Bot
 
 on:
   push:
@@ -6,16 +6,37 @@ on:
       - main
 
 jobs:
-  deploy:
+  build_and_deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2 # Correct action to check out code
-      - name: Echo a message
+      - name: Check Out Code
+        uses: actions/checkout@v2
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Build, Tag, and Push Docker Image to ECR
         run: |
-          if [ -z "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
-            echo "AWS_SECRET_ACCESS_KEY is not set."
-          else
-            echo "AWS_SECRET_ACCESS_KEY is set."
-          fi
+          IMAGE_URI=public.ecr.aws/c4k9m1v7/telegram-bot
+          VERSION=v1.0.$((1 + $(git tag --list "v1.0.*" | wc -l)))
+          docker build -t $IMAGE_URI:$VERSION .
+          docker push $IMAGE_URI:$VERSION
+          echo "New image pushed: $IMAGE_URI:$VERSION"
+
+      - name: Update ECS Task Definition
+        id: task-def
+        uses: fabfuel/ecs-deploy@v1.0.0
+        with:
+          cluster: your-ecs-cluster-name
+          service: your-ecs-service-name
+          image: public.ecr.aws/c4k9m1v7/telegram-bot:$VERSION
+          access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          region: ${{ secrets.AWS_REGION }}
+
+      - name: Verify Deployment
+        run: echo "Deployed ${{ steps.task-def.outputs.image }} successfully to ECS"

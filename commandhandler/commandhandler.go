@@ -52,8 +52,9 @@ func HandleCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update, username string
 }
 
 func help(isUserAdmin bool) string {
+	applicationVersion := "0.1"
 	if isUserAdmin {
-		return "Here are the commands you can use: \n/help\n/addBook\n/getUserList\n/setProgress\n/getCurrentBook\n/getGroupProgress\n/removeBook\n/addUser\n/removeUser\n/getBookList\n"
+		return "Here are the commands you can use: \n/help\n/addBook\n/getUserList\n/setProgress\n/getCurrentBook\n/getGroupProgress\n/removeBook\n/addUser\n/removeUser\n/getBookList\n applicationVersion: " + applicationVersion
 	}
 	return "Here are the commands you can use: \n/help\n/setProgress\n/getCurrentBook\n"
 }
