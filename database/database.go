@@ -1,5 +1,7 @@
 package database
 
+// package main
+
 import (
 	"fmt"
 	"log"
@@ -20,6 +22,7 @@ type User struct {
 	UserName string `dynamodbav:"UserName"`
 	Name     string `dynamodbav:"Name"`
 	IsAdmin  bool   `dynamodbav:"IsAdmin"`
+	Status   string `dynamodbav:"Status"`
 }
 
 type Book struct {
@@ -29,10 +32,20 @@ type Book struct {
 	Active bool   `dynamodbav:"Active"`
 }
 
+type BookType string
+
+const (
+	AudioBook   BookType = "audio"
+	RegularBook BookType = "regular"
+)
+
 type ReadingProgress struct {
-	UserName string `dynamodbav:"UserName"`
-	BookID   string `dynamodbav:"BookID"`
-	Progress int    `dynamodbav:"Progress"`
+	UserName   string   `dynamodbav:"UserName"`
+	BookID     string   `dynamodbav:"BookID"`
+	Progress   int      `dynamodbav:"Progress"`
+	Type       BookType `dynamodbav:"Type"`
+	TotalPages int      `dynamodbav:"TotalPages"`
+	PageNumber int      `dynamodbav:"PageNumber"`
 }
 
 func AWSsession() *session.Session {
@@ -309,7 +322,6 @@ func GetCurrentBook() Book {
 	}
 
 	result, err := svc.Scan(input)
-	fmt.Println("result!!: ", result)
 	if err != nil {
 		log.Fatalf("Query API call failed: %s", err)
 	}
@@ -328,24 +340,16 @@ func GetCurrentBook() Book {
 	return book
 }
 
-func SetProgress(userName string, progress int) {
+func SetProgress(progress ReadingProgress) {
 	sess := AWSsession()
 	svc := dynamodb.New(sess)
 
-	// Use the GetCurrentBook function to find the active book
-	activeBook := GetCurrentBook()
-	if activeBook.BookID == "" {
-		log.Println("No active book found.")
+	if progress.UserName == "" || progress.BookID == "" {
+		log.Println("Invalid reading progress data: missing key attributes.")
 		return
 	}
 
-	readingProgress := ReadingProgress{
-		UserName: userName,
-		BookID:   activeBook.BookID,
-		Progress: progress,
-	}
-
-	av, err := dynamodbattribute.MarshalMap(readingProgress)
+	av, err := dynamodbattribute.MarshalMap(progress)
 	if err != nil {
 		log.Fatalf("Failed to marshal reading progress for DynamoDB: %s", err)
 	}
@@ -360,7 +364,7 @@ func SetProgress(userName string, progress int) {
 		log.Fatalf("Failed to put reading progress item into DynamoDB: %s", err)
 	}
 
-	log.Printf("Updated reading progress for user '%s' on book '%s'.\n", userName, activeBook.BookID)
+	log.Printf("Updated reading progress for user '%s' on book '%s'.\n", progress.UserName, progress.BookID)
 }
 
 func GroupProgress() string {
@@ -544,3 +548,113 @@ func BookList() []Book {
 
 	return bookList
 }
+
+func UserStatus(userName string) string {
+	sess := AWSsession()
+	svc := dynamodb.New(sess)
+	key := map[string]*dynamodb.AttributeValue{
+		"UserName": {
+			S: aws.String(userName),
+		},
+	}
+
+	input := &dynamodb.GetItemInput{
+		Key:       key,
+		TableName: aws.String("Users"),
+	}
+
+	result, _ := svc.GetItem(input)
+	var user User
+	dynamodbattribute.UnmarshalMap(result.Item, &user)
+	return user.Status
+}
+
+func SetUserStatus(userName string, status string) {
+	sess := AWSsession()
+	svc := dynamodb.New(sess)
+
+	key := map[string]*dynamodb.AttributeValue{
+		"UserName": {
+			S: aws.String(userName),
+		},
+	}
+
+	updateExpression := "SET #st = :s"
+
+	expressionAttributeNames := map[string]*string{
+		"#st": aws.String("Status"),
+	}
+	expressionAttributeValues := map[string]*dynamodb.AttributeValue{
+		":s": {
+			S: aws.String(status),
+		},
+	}
+	input := &dynamodb.UpdateItemInput{
+		TableName:                 aws.String("Users"),
+		Key:                       key,
+		UpdateExpression:          aws.String(updateExpression),
+		ExpressionAttributeNames:  expressionAttributeNames,
+		ExpressionAttributeValues: expressionAttributeValues,
+		ReturnValues:              aws.String("UPDATED_NEW"),
+	}
+
+	result, err := svc.UpdateItem(input)
+	fmt.Println("result!", result)
+	if err != nil {
+		fmt.Printf("Failed to update item: %v\n", err)
+		return
+	}
+
+	fmt.Println("User status updated successfully")
+}
+
+func UserProgress(userName string) *ReadingProgress {
+	sess := session.Must(session.NewSession()) // Assume AWSsession() initializes a session
+	svc := dynamodb.New(sess)
+
+	activeBook := GetCurrentBook() // Assume GetCurrentBook() returns the current book details
+	if activeBook.BookID == "" {
+		log.Fatal("No active book found.")
+	}
+
+	keyCond := expression.Key("BookID").Equal(expression.Value(activeBook.BookID)).
+		And(expression.Key("UserName").Equal(expression.Value(userName)))
+	expr, err := expression.NewBuilder().WithKeyCondition(keyCond).Build()
+	if err != nil {
+		log.Fatalf("Failed to build expression: %s", err)
+	}
+
+	queryInput := &dynamodb.QueryInput{
+		TableName:                 aws.String("ReadingProgress"),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		KeyConditionExpression:    expr.KeyCondition(),
+	}
+
+	result, err := svc.Query(queryInput)
+	if err != nil {
+		log.Fatalf("Failed to query reading progress: %s", err)
+	}
+
+	var progresses []ReadingProgress
+	err = dynamodbattribute.UnmarshalListOfMaps(result.Items, &progresses)
+	if err != nil {
+		log.Fatalf("Failed to unmarshal reading progress results: %s", err)
+	}
+
+	if len(progresses) == 0 {
+		return nil // No progress found, return nil
+	}
+
+	// Assuming there is only one record per user per book
+	return &progresses[0]
+}
+
+// func main() {
+// 	readingProgress := ReadingProgress{
+// 		UserName: "ads",
+// 		BookID:   "123",
+// 		Type:     "asd",
+// 	}
+// 	fmt.Println(readingProgress)
+// }

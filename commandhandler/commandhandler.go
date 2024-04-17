@@ -5,6 +5,7 @@ import (
 	"log"
 	"strconv"
 	"telegram-bot/database"
+	"telegram-bot/statemachine"
 	"telegram-bot/utils"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -19,6 +20,13 @@ func HandleCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update, username string
 
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "")
 
+	userStatus := database.UserStatus(username)
+
+	if userStatus != "" {
+		msg.Text = statemachine.FuncMap[userStatus](username, userStatus, bot, update)
+		return
+	}
+
 	isUserAdmin := database.IsUserAdmin(username)
 
 	switch update.Message.Command() {
@@ -29,7 +37,8 @@ func HandleCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update, username string
 	case "getUserList":
 		msg.Text = getUserList()
 	case "setProgress":
-		msg.Text = setProgress(update, username)
+		setProgress(update, username, bot)
+		return
 	case "getCurrentBook":
 		msg.Text = getCurrentBook()
 	case "getGroupProgress":
@@ -54,7 +63,7 @@ func HandleCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update, username string
 func help(isUserAdmin bool) string {
 	applicationVersion := "0.1"
 	if isUserAdmin {
-		return "Here are the commands you can use: \n/help\n/addBook\n/getUserList\n/setProgress\n/getCurrentBook\n/getGroupProgress\n/removeBook\n/addUser\n/removeUser\n/getBookList\n applicationVersion: " + applicationVersion
+		return "Here are the commands you can use: \n/help\n/addBook\n/getUserList\n/setProgress\n/getCurrentBook\n/getGroupProgress\n/removeBook\n/addUser\n/removeUser\n/getBookList\n\n applicationVersion: " + applicationVersion
 	}
 	return "Here are the commands you can use: \n/help\n/setProgress\n/getCurrentBook\n"
 }
@@ -86,19 +95,8 @@ func getUserList() string {
 	return "Here is the list of users: " + usersText
 }
 
-func setProgress(update tgbotapi.Update, username string) string {
-	args := utils.NormalizeQuotes(update.Message.CommandArguments())
-	var progress int
-	_, err := fmt.Sscanf(args, "%d", &progress)
-	if progress < 0 || progress > 100 {
-		return "Progress should be between 0 and 100."
-	}
-	if err != nil {
-		return "Please use the format: /setProgress 50"
-	}
-	database.SetProgress(username, progress)
-
-	return "Done"
+func setProgress(update tgbotapi.Update, username string, bot *tgbotapi.BotAPI) {
+	statemachine.SetProgress(username, "", bot, update)
 }
 
 func getCurrentBook() string {
