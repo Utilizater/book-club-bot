@@ -6,12 +6,9 @@ import (
 	"strconv"
 	"telegram-bot/database"
 	"telegram-bot/statemachine"
-	"telegram-bot/utils"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
-
-// var chatStates = make(map[int64]string)
 
 func HandleCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update, username string) {
 	log.Printf("Received message: %s", update.Message.Text)
@@ -21,9 +18,9 @@ func HandleCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update, username string
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "")
 
 	userStatus := database.UserStatus(username)
-
+	fmt.Println("User status: ", userStatus)
 	if userStatus != "" {
-		msg.Text = statemachine.FuncMap[userStatus](username, userStatus, bot, update)
+		statemachine.FuncMap[userStatus](username, userStatus, bot, update)
 		return
 	}
 
@@ -33,22 +30,25 @@ func HandleCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update, username string
 	case "help":
 		msg.Text = help(isUserAdmin)
 	case "addBook":
-		msg.Text = addBook(update, isUserAdmin)
+		statemachine.SetBook(username, "", bot, update)
+		return
 	case "getUserList":
 		msg.Text = getUserList()
 	case "setProgress":
-		setProgress(update, username, bot)
+		statemachine.SetProgress(username, "", bot, update)
 		return
 	case "getCurrentBook":
 		msg.Text = getCurrentBook()
 	case "getGroupProgress":
 		msg.Text = getGroupProgress()
-	case "removeBook":
-		msg.Text = removeBook(update.Message.CommandArguments(), isUserAdmin)
+	// case "removeBook":
+	// 	msg.Text = removeBook(update.Message.CommandArguments(), isUserAdmin)
 	case "addUser":
-		msg.Text = addUser(update, isUserAdmin)
+		statemachine.AddUser(username, "", bot, update)
+		return
 	case "removeUser":
-		msg.Text = removeUser(update, isUserAdmin)
+		statemachine.RemoveUser(username, "", bot, update)
+		return
 	case "getBookList":
 		msg.Text = bookList()
 	default:
@@ -61,42 +61,21 @@ func HandleCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update, username string
 }
 
 func help(isUserAdmin bool) string {
-	applicationVersion := "0.1"
+	applicationVersion := "0.3"
 	if isUserAdmin {
-		return "Here are the commands you can use: \n/help\n/addBook\n/getUserList\n/setProgress\n/getCurrentBook\n/getGroupProgress\n/removeBook\n/addUser\n/removeUser\n/getBookList\n\n applicationVersion: " + applicationVersion
+		return "Here are the commands you can use: \n/help\n/addBook\n/getUserList\n/setProgress\n/getCurrentBook\n/getGroupProgress\n/addUser\n/removeUser\n/getBookList\n\n applicationVersion: " + applicationVersion
 	}
-	return "Here are the commands you can use: \n/help\n/setProgress\n/getCurrentBook\n"
-}
-
-func addBook(update tgbotapi.Update, isUserAdmin bool) string {
-	if !isUserAdmin {
-		return "You are not authorized to add a book."
-	}
-	args := utils.NormalizeQuotes(update.Message.CommandArguments())
-	var title, author string
-	_, err := fmt.Sscanf(args, "title: %q, author: %q", &title, &author)
-
-	if err != nil {
-		return "Failed to parse input. Please use the format: /addBook title: \"The Great Gatsby\", author: \"F. Scott Fitzgerald\""
-	}
-
-	database.AddBook(title, author)
-
-	return "Book added successfully: " + title + " by " + author
+	return "Here are the commands you can use: \n/help\n/setProgress\n/getCurrentBook\n/getGroupProgress"
 }
 
 func getUserList() string {
 	userList := database.UserList()
 	usersText := "\n"
 	for _, user := range userList {
-		usersText += user.UserName + " : " + user.Name + "\n"
+		usersText += user.UserName + " : " + user.FullName + "\n"
 	}
 
 	return "Here is the list of users: " + usersText
-}
-
-func setProgress(update tgbotapi.Update, username string, bot *tgbotapi.BotAPI) {
-	statemachine.SetProgress(username, "", bot, update)
 }
 
 func getCurrentBook() string {
@@ -108,45 +87,13 @@ func getGroupProgress() string {
 	return database.GroupProgress()
 }
 
-func removeBook(BookID string, isUserAdmin bool) string {
-	if !isUserAdmin {
-		return "You are not authorized to remove a book."
-	}
-	database.RemoveBook(BookID)
-	return "Done"
-}
-
-func addUser(update tgbotapi.Update, isUserAdmin bool) string {
-	if !isUserAdmin {
-		return "You are not authorized to add a user."
-	}
-	args := utils.NormalizeQuotes(update.Message.CommandArguments())
-	var userName, name string
-	_, err := fmt.Sscanf(args, "nickname: %q, name: %q", &userName, &name)
-
-	if err != nil {
-		return "Failed to parse input. Please use the format: /addUser nickname: \"alexeygav\", name: \"Alexey Gavrilov\""
-	}
-
-	database.AddUser(userName, name)
-	return "Done"
-}
-
-func removeUser(update tgbotapi.Update, isUserAdmin bool) string {
-	if !isUserAdmin {
-		return "You are not authorized to remove a user."
-	}
-	args := utils.NormalizeQuotes(update.Message.CommandArguments())
-	var userName string
-	_, err := fmt.Sscanf(args, "%d", &userName)
-
-	if err != nil {
-		return "Failed to parse input. Please use the format: /removeUser alexeygav"
-	}
-
-	database.RemoveUser(userName)
-	return "Done"
-}
+// func removeBook(BookID string, isUserAdmin bool) string {
+// 	if !isUserAdmin {
+// 		return "You are not authorized to remove a book."
+// 	}
+// 	database.RemoveBook(BookID)
+// 	return "Done"
+// }
 
 func bookList() string {
 	bookList := database.BookList()

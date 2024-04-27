@@ -20,7 +20,7 @@ import (
 
 type User struct {
 	UserName string `dynamodbav:"UserName"`
-	Name     string `dynamodbav:"Name"`
+	FullName string `dynamodbav:"FullName"`
 	IsAdmin  bool   `dynamodbav:"IsAdmin"`
 	Status   string `dynamodbav:"Status"`
 }
@@ -63,12 +63,39 @@ func AWSsession() *session.Session {
 	return sess
 }
 
+func tableName(table string) string {
+	environment := os.Getenv("ENV")
+
+	if environment == "" {
+		log.Fatal("There is no environment")
+	}
+
+	type TableConfig = map[string]string
+
+	var tablesPerEnv = map[string]TableConfig{
+		"users": {
+			"prod": "Users",
+			"dev":  "Users_dev",
+		},
+		"books": {
+			"prod": "Books",
+			"dev":  "Books_dev",
+		},
+		"reading_progress": {
+			"prod": "ReadingProgress",
+			"dev":  "ReadingProgress_dev",
+		},
+	}
+
+	return tablesPerEnv[table][environment]
+}
+
 func IsUserExists(username string) bool {
 	sess := AWSsession()
 	svc := dynamodb.New(sess)
-
+	usersTable := tableName("users")
 	input := &dynamodb.GetItemInput{
-		TableName: aws.String("Users"),
+		TableName: aws.String(usersTable),
 		Key: map[string]*dynamodb.AttributeValue{
 			"UserName": {
 				S: aws.String(username),
@@ -101,20 +128,20 @@ func CreateUser(userName, name string, isAdmin bool) User {
 	exists := IsUserExists(userName)
 	if exists {
 		fmt.Printf("User %s already exists\n", userName)
-		return User{UserName: userName, Name: name, IsAdmin: isAdmin}
+		return User{UserName: userName, FullName: name, IsAdmin: isAdmin}
 	}
 
 	item, err := dynamodbattribute.MarshalMap(User{
 		UserName: userName,
-		Name:     name,
+		FullName: name,
 		IsAdmin:  isAdmin,
 	})
 	if err != nil {
 		log.Fatalf("Failed to marshal User: %s", err)
 	}
-
+	usersTable := tableName("users")
 	input := &dynamodb.PutItemInput{
-		TableName: aws.String("Users"),
+		TableName: aws.String(usersTable),
 		Item:      item,
 	}
 
@@ -125,15 +152,16 @@ func CreateUser(userName, name string, isAdmin bool) User {
 	}
 
 	fmt.Printf("Successfully added user: %s\n", userName)
-	return User{UserName: userName, Name: name, IsAdmin: isAdmin}
+	return User{UserName: userName, FullName: name, IsAdmin: isAdmin}
 }
 
 func IsUserAdmin(username string) bool {
 	sess := AWSsession()
 	svc := dynamodb.New(sess)
 
+	usersTable := tableName("users")
 	input := &dynamodb.GetItemInput{
-		TableName: aws.String("Users"),
+		TableName: aws.String(usersTable),
 		Key: map[string]*dynamodb.AttributeValue{
 			"UserName": {
 				S: aws.String(username),
@@ -160,18 +188,13 @@ func IsUserAdmin(username string) bool {
 }
 
 func UserList() []User {
-	// Create a new AWS session
 	sess := AWSsession()
-
-	// Create a DynamoDB client from just created session
 	svc := dynamodb.New(sess)
 
-	// Define the query input
+	usersTable := tableName("users")
 	input := &dynamodb.ScanInput{
-		TableName: aws.String("Users"), // Replace with your DynamoDB table name
+		TableName: aws.String(usersTable),
 	}
-
-	// Make the DynamoDB Query API call
 	result, err := svc.Scan(input)
 	if err != nil {
 		log.Fatalf("Query API call failed: %s", err)
@@ -179,7 +202,6 @@ func UserList() []User {
 
 	var userList []User
 
-	// Unmarshal the Items field in the result value to the User struct
 	err = dynamodbattribute.UnmarshalListOfMaps(result.Items, &userList)
 	if err != nil {
 		log.Fatalf("Failed to unmarshal Query result items, %v", err)
@@ -192,8 +214,9 @@ func IsUserBelongsToClub(username string) bool {
 	sess := AWSsession()
 	svc := dynamodb.New(sess)
 
+	usersTable := tableName("users")
 	input := &dynamodb.GetItemInput{
-		TableName: aws.String("Users"),
+		TableName: aws.String(usersTable),
 		Key: map[string]*dynamodb.AttributeValue{
 			"UserName": {
 				S: aws.String(username),
@@ -219,7 +242,7 @@ func IsUserBelongsToClub(username string) bool {
 	return true
 }
 
-func AddBook(title string, author string) {
+func AddBook(title string) {
 	sess := AWSsession()
 	svc := dynamodb.New(sess)
 
@@ -231,8 +254,9 @@ func AddBook(title string, author string) {
 		log.Fatalf("Got error building expression: %s", err)
 	}
 
+	booksTable := tableName("books")
 	scanInput := &dynamodb.ScanInput{
-		TableName:                 aws.String("Books"),
+		TableName:                 aws.String(booksTable),
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
 		FilterExpression:          expr.Filter(),
@@ -251,9 +275,9 @@ func AddBook(title string, author string) {
 			log.Fatalf("Failed to unmarshal Book, %v", err)
 		}
 
-		// Update the book to inactive
+		booksTable := tableName("books")
 		updateInput := &dynamodb.UpdateItemInput{
-			TableName: aws.String("Books"),
+			TableName: aws.String(booksTable),
 			Key: map[string]*dynamodb.AttributeValue{
 				"BookID": {
 					S: aws.String(book.BookID),
@@ -280,7 +304,6 @@ func AddBook(title string, author string) {
 	newBook := Book{
 		BookID: bookID,
 		Title:  title,
-		Author: author,
 		Active: true,
 	}
 
@@ -289,8 +312,9 @@ func AddBook(title string, author string) {
 		log.Fatalf("Got error marshalling new book item: %s", err)
 	}
 
+	booksTable = tableName("books")
 	putInput := &dynamodb.PutItemInput{
-		TableName: aws.String("Books"),
+		TableName: aws.String(booksTable),
 		Item:      newBookItem,
 	}
 
@@ -300,6 +324,36 @@ func AddBook(title string, author string) {
 	}
 
 	fmt.Println("Successfully added book and updated existing books status")
+}
+
+func UpdateBookAuthor(bookID, author string) {
+	sess := AWSsession()
+	svc := dynamodb.New(sess)
+	booksTable := tableName("books")
+
+	// Prepare the update expression
+	updateInput := &dynamodb.UpdateItemInput{
+		TableName: aws.String(booksTable),
+		Key: map[string]*dynamodb.AttributeValue{
+			"BookID": {
+				S: aws.String(bookID),
+			},
+		},
+		UpdateExpression: aws.String("set Author = :a"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":a": {
+				S: aws.String(author),
+			},
+		},
+	}
+
+	// Perform the update
+	_, err := svc.UpdateItem(updateInput)
+	if err != nil {
+		log.Fatalf("Got error calling UpdateItem for author update: %s", err)
+	}
+
+	log.Println("Successfully updated book's author")
 }
 
 func GetCurrentBook() Book {
@@ -312,9 +366,9 @@ func GetCurrentBook() Book {
 		log.Fatalf("Got error building expression: %s", err)
 	}
 
-	// Prepare the ScanInput
+	booksTable := tableName("books")
 	input := &dynamodb.ScanInput{
-		TableName:                 aws.String("Books"),
+		TableName:                 aws.String(booksTable),
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
 		FilterExpression:          expr.Filter(),
@@ -354,8 +408,9 @@ func SetProgress(progress ReadingProgress) {
 		log.Fatalf("Failed to marshal reading progress for DynamoDB: %s", err)
 	}
 
+	readingProgressTable := tableName("reading_progress")
 	input := &dynamodb.PutItemInput{
-		TableName: aws.String("ReadingProgress"),
+		TableName: aws.String(readingProgressTable),
 		Item:      av,
 	}
 
@@ -382,8 +437,9 @@ func GroupProgress() string {
 		log.Fatalf("Failed to build expression: %s", err)
 	}
 
+	readingProgressTable := tableName("reading_progress")
 	queryInput := &dynamodb.QueryInput{
-		TableName:                 aws.String("ReadingProgress"),
+		TableName:                 aws.String(readingProgressTable),
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
 		KeyConditionExpression:    expr.KeyCondition(),
@@ -407,7 +463,7 @@ func GroupProgress() string {
 	var groupProgress string
 	for _, progress := range progresses {
 		user := GetUserDetails(progress.UserName)
-		groupProgress += fmt.Sprintf("%s: %d%%\n", user.Name, progress.Progress)
+		groupProgress += fmt.Sprintf("%s: %d%%\n", user.FullName, progress.Progress)
 	}
 
 	if groupProgress == "" {
@@ -421,8 +477,9 @@ func GetUserDetails(userName string) User {
 	sess := AWSsession()
 	svc := dynamodb.New(sess)
 
+	usersTable := tableName("users")
 	input := &dynamodb.GetItemInput{
-		TableName: aws.String("Users"),
+		TableName: aws.String(usersTable),
 		Key: map[string]*dynamodb.AttributeValue{
 			"UserName": {
 				S: aws.String(userName),
@@ -452,11 +509,12 @@ func GetUserDetails(userName string) User {
 }
 
 func RemoveBook(bookID string) {
-	sess := AWSsession() // Assuming AWSsession() is your function to create and return an AWS session
+	sess := AWSsession()
 	svc := dynamodb.New(sess)
 
+	booksTable := tableName("books")
 	input := &dynamodb.DeleteItemInput{
-		TableName: aws.String("Books"), // Replace with your actual table name
+		TableName: aws.String(booksTable),
 		Key: map[string]*dynamodb.AttributeValue{
 			"BookID": {
 				S: aws.String(bookID),
@@ -484,15 +542,16 @@ func AddUser(userName string, name string) {
 
 	item, err := dynamodbattribute.MarshalMap(User{
 		UserName: userName,
-		Name:     name,
+		FullName: name,
 		IsAdmin:  false,
 	})
 	if err != nil {
 		log.Fatalf("Failed to marshal User: %s", err)
 	}
 
+	usersTable := tableName("users")
 	input := &dynamodb.PutItemInput{
-		TableName: aws.String("Users"),
+		TableName: aws.String(usersTable),
 		Item:      item,
 	}
 
@@ -505,12 +564,64 @@ func AddUser(userName string, name string) {
 	fmt.Printf("Successfully added user: %s\n", userName)
 }
 
+func SetUserFullName(name string) {
+	sess := AWSsession()
+	svc := dynamodb.New(sess)
+	usersTable := tableName("users")
+	scanInput := &dynamodb.ScanInput{
+		TableName:        aws.String(usersTable),
+		FilterExpression: aws.String("attribute_not_exists(FullName) or attribute_type(FullName, :nullType)"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":nullType": {S: aws.String("NULL")},
+		},
+	}
+
+	// Perform the scan
+	scanResult, err := svc.Scan(scanInput)
+	fmt.Println("scanResult", scanResult)
+	if err != nil {
+		log.Fatalf("Failed to scan DynamoDB table: %s", err)
+	}
+
+	// Update each item found with the new name
+	for _, item := range scanResult.Items {
+		user := User{}
+		err := dynamodbattribute.UnmarshalMap(item, &user)
+		if err != nil {
+			log.Fatalf("Failed to unmarshal DynamoDB item: %s", err)
+		}
+
+		// Set the new name
+		user.FullName = name
+
+		// Marshal the updated user back into a DynamoDB attribute map
+		updatedAttributes, err := dynamodbattribute.MarshalMap(user)
+		if err != nil {
+			log.Fatalf("Failed to marshal updated user: %s", err)
+		}
+
+		// Create the input for the update
+		updateInput := &dynamodb.PutItemInput{
+			TableName: aws.String(usersTable),
+			Item:      updatedAttributes,
+		}
+
+		_, err = svc.PutItem(updateInput)
+		if err != nil {
+			log.Fatalf("Failed to update item in DynamoDB table: %s", err)
+		}
+
+		fmt.Printf("Successfully updated user: %s\n", user.UserName)
+	}
+}
+
 func RemoveUser(userName string) {
 	sess := AWSsession()
 	svc := dynamodb.New(sess)
 
+	usersTable := tableName("users")
 	input := &dynamodb.DeleteItemInput{
-		TableName: aws.String("Users"), // Replace with your actual table name
+		TableName: aws.String(usersTable),
 		Key: map[string]*dynamodb.AttributeValue{
 			"UserName": {
 				S: aws.String(userName),
@@ -530,8 +641,9 @@ func BookList() []Book {
 	sess := AWSsession()
 	svc := dynamodb.New(sess)
 
+	booksTable := tableName("books")
 	input := &dynamodb.ScanInput{
-		TableName: aws.String("Books"),
+		TableName: aws.String(booksTable),
 	}
 
 	result, err := svc.Scan(input)
@@ -558,9 +670,10 @@ func UserStatus(userName string) string {
 		},
 	}
 
+	usersTable := tableName("users")
 	input := &dynamodb.GetItemInput{
 		Key:       key,
-		TableName: aws.String("Users"),
+		TableName: aws.String(usersTable),
 	}
 
 	result, _ := svc.GetItem(input)
@@ -589,8 +702,9 @@ func SetUserStatus(userName string, status string) {
 			S: aws.String(status),
 		},
 	}
+	usersTable := tableName("users")
 	input := &dynamodb.UpdateItemInput{
-		TableName:                 aws.String("Users"),
+		TableName:                 aws.String(usersTable),
 		Key:                       key,
 		UpdateExpression:          aws.String(updateExpression),
 		ExpressionAttributeNames:  expressionAttributeNames,
@@ -598,8 +712,7 @@ func SetUserStatus(userName string, status string) {
 		ReturnValues:              aws.String("UPDATED_NEW"),
 	}
 
-	result, err := svc.UpdateItem(input)
-	fmt.Println("result!", result)
+	_, err := svc.UpdateItem(input)
 	if err != nil {
 		fmt.Printf("Failed to update item: %v\n", err)
 		return
@@ -624,8 +737,9 @@ func UserProgress(userName string) *ReadingProgress {
 		log.Fatalf("Failed to build expression: %s", err)
 	}
 
+	readingProgressTable := tableName("reading_progress")
 	queryInput := &dynamodb.QueryInput{
-		TableName:                 aws.String("ReadingProgress"),
+		TableName:                 aws.String(readingProgressTable),
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
 		KeyConditionExpression:    expr.KeyCondition(),
@@ -651,10 +765,5 @@ func UserProgress(userName string) *ReadingProgress {
 }
 
 // func main() {
-// 	readingProgress := ReadingProgress{
-// 		UserName: "ads",
-// 		BookID:   "123",
-// 		Type:     "asd",
-// 	}
-// 	fmt.Println(readingProgress)
+// 	SetUserFullName("111")
 // }
