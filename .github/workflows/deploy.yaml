@@ -4,40 +4,56 @@ on:
   push:
     branches:
       - main
-
 jobs:
-  build_and_deploy:
+  hello_world_job:
     runs-on: ubuntu-latest
+    container:
+      image: golang:1.18
     steps:
-      - name: Check Out Code
+      - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Login to Amazon ECR
-        run: |
-          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin public.ecr.aws/c4k9m1v7
+      - name: Run a one-line script
+        run: echo Hello, world!
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+      - name: Go Version
+        run: go version
 
-      - name: Build, Tag, and Push Docker Image to ECR
-        run: |
-          IMAGE_URI=public.ecr.aws/c4k9m1v7/telegram-bot
-          VERSION=v1.0.$((1 + $(git tag --list "v1.0.*" | wc -l)))
-          echo "Building image: $IMAGE_URI:$VERSION"
-          docker build -t $IMAGE_URI:$VERSION .
-          docker push $IMAGE_URI:$VERSION
-          echo "New image pushed: $IMAGE_URI:$VERSION"
-      - name: Update ECS Service
-        run: |
-          aws ecs update-service --cluster TelegramBotC --service your-ecs-service-name --force-new-deployment
+      # - name: Docker version
+      #   run: docker --version
+# jobs:
+#   build_and_deploy:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Check Out Code
+#         uses: actions/checkout@v2
 
-      - name: Verify Deployment
-        run: echo "Deployed ${{ steps.task-def.outputs.image }} successfully to ECS"
-        env:
-          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#       - name: Login to Amazon ECR
+#         run: |
+#           aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin public.ecr.aws/c4k9m1v7
+
+#       - name: Configure AWS Credentials
+#         uses: aws-actions/configure-aws-credentials@v1
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#           aws-region: ${{ secrets.AWS_REGION }}
+
+#       - name: Build, Tag, and Push Docker Image to ECR
+#         run: |
+#           IMAGE_URI=public.ecr.aws/c4k9m1v7/telegram-bot
+#           VERSION=v1.0.$((1 + $(git tag --list "v1.0.*" | wc -l)))
+#           echo "Building image: $IMAGE_URI:$VERSION"
+#           docker build -t $IMAGE_URI:$VERSION .
+#           docker push $IMAGE_URI:$VERSION
+#           echo "New image pushed: $IMAGE_URI:$VERSION"
+#       - name: Update ECS Service
+#         run: |
+#           aws ecs update-service --cluster TelegramBotC --service your-ecs-service-name --force-new-deployment
+
+#       - name: Verify Deployment
+#         run: echo "Deployed ${{ steps.task-def.outputs.image }} successfully to ECS"
+#         env:
+#           AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+#           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
