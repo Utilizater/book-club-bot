@@ -51,6 +51,9 @@ func HandleCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update, username string
 		return
 	case "getBookList":
 		msg.Text = bookList()
+	case "updateMeetingDate":
+		statemachine.UpdateMeetingDate(username, "", bot, update)
+		return
 	default:
 		msg.Text = "I don't recognize that command. Use /help to see the list of commands."
 	}
@@ -63,7 +66,7 @@ func HandleCommand(bot *tgbotapi.BotAPI, update tgbotapi.Update, username string
 func help(isUserAdmin bool) string {
 	applicationVersion := "0.6"
 	if isUserAdmin {
-		return "Here are the commands you can use: \n/help\n/addBook\n/getUserList\n/setProgress\n/getCurrentBook\n/getGroupProgress\n/addUser\n/removeUser\n/getBookList\n\n applicationVersion: " + applicationVersion
+		return "Here are the commands you can use: \n/help\n/addBook\n/getUserList\n/setProgress\n/getCurrentBook\n/getGroupProgress\n/addUser\n/removeUser\n/getBookList\n/updateMeetingDate\n applicationVersion: " + applicationVersion
 	}
 	return "Here are the commands you can use: \n/help\n/setProgress\n/getCurrentBook\n/getGroupProgress"
 }
@@ -80,7 +83,12 @@ func getUserList() string {
 
 func getCurrentBook() string {
 	book := database.GetCurrentBook()
-	return "The current book is: " + book.Title + " by " + book.Author + "(id - " + book.BookID + ")"
+	result := "The current book is: " + book.Title + " by " + book.Author + " (id - " + book.BookID + ") \n"
+	if book.MeetingDate != "" {
+		result += "Meeting date is " + book.MeetingDate + "\n"
+	}
+
+	return result
 }
 
 func getGroupProgress() string {

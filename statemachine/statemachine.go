@@ -19,6 +19,7 @@ var FuncMap = map[string]FuncType{
 	"enter_total_pages":        SetProgress,
 	"enter_book_name":          SetBook,
 	"enter_author":             SetBook,
+	"enter_finishing_date":     SetBook,
 	"enter_nickname":           AddUser,
 	"enter_username":           AddUser,
 	"enter_name":               AddUser,
@@ -50,6 +51,8 @@ func SetBook(user string, userStatus string, bot *tgbotapi.BotAPI, update tgbota
 		setbook.EnterBookName(user, bot, update)
 	case "enter_author":
 		setbook.EnterAuthor(user, bot, update)
+	case "enter_finishing_date":
+		setbook.EnterFinishingDate(user, bot, update)
 	default:
 		log.Fatal("There is no status - " + userStatus)
 	}
@@ -76,5 +79,12 @@ func RemoveUser(user string, userStatus string, bot *tgbotapi.BotAPI, update tgb
 		removeuser.RemoveUser(user, bot, update)
 	default:
 		log.Fatal("There is no status - " + userStatus)
+	}
+}
+
+func UpdateMeetingDate(user string, userStatus string, bot *tgbotapi.BotAPI, update tgbotapi.Update) {
+	switch userStatus {
+	case "":
+		setbook.UpdateBookDateDefault(user, bot, update)
 	}
 }
