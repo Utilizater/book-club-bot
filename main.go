@@ -44,6 +44,7 @@ func main() {
 
 	for update := range updates {
 		if update.Message != nil {
+			// log.Println("update.Message.Chat.ID!", update.Message.Chat.ID)
 			username := update.Message.From.UserName
 			isUserBelongsToClub := database.IsUserBelongsToClub(username)
 			if !isUserBelongsToClub {

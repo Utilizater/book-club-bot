@@ -26,10 +26,11 @@ type User struct {
 }
 
 type Book struct {
-	BookID string `dynamodbav:"BookID"`
-	Title  string `dynamodbav:"Title"`
-	Author string `dynamodbav:"Author"`
-	Active bool   `dynamodbav:"Active"`
+	BookID      string `dynamodbav:"BookID"`
+	Title       string `dynamodbav:"Title"`
+	Author      string `dynamodbav:"Author"`
+	Active      bool   `dynamodbav:"Active"`
+	MeetingDate string `dynamodbav:"MeetingDate"`
 }
 
 type BookType string
@@ -343,6 +344,35 @@ func UpdateBookAuthor(bookID, author string) {
 		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 			":a": {
 				S: aws.String(author),
+			},
+		},
+	}
+
+	// Perform the update
+	_, err := svc.UpdateItem(updateInput)
+	if err != nil {
+		log.Fatalf("Got error calling UpdateItem for author update: %s", err)
+	}
+
+	log.Println("Successfully updated book's author")
+}
+
+func UpdateBookDate(bookID, date string) {
+	sess := AWSsession()
+	svc := dynamodb.New(sess)
+	booksTable := tableName("books")
+
+	updateInput := &dynamodb.UpdateItemInput{
+		TableName: aws.String(booksTable),
+		Key: map[string]*dynamodb.AttributeValue{
+			"BookID": {
+				S: aws.String(bookID),
+			},
+		},
+		UpdateExpression: aws.String("set MeetingDate = :a"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":a": {
+				S: aws.String(date),
 			},
 		},
 	}
